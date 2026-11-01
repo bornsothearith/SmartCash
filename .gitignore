@@ -1,1 +1,5 @@
-
+smartcash.db
+*.db
+__pycache__/
+.env
+data/real/
