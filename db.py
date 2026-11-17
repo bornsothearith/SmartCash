@@ -94,6 +94,23 @@ def to_usd(amount, currency):
     return amount if currency == "USD" else amount / KHR_PER_USD
 
 
+def summarize(rows):
+    """Income, spending and net in USD for a list of transaction rows.
+
+    Kept apart so the Transactions tab never shows one mixed total.
+    """
+    income = sum(to_usd(r["amount"], r["currency"]) for r in rows if r["tx_type"] == "income")
+    spending = sum(to_usd(r["amount"], r["currency"]) for r in rows if r["tx_type"] == "expense")
+    return {
+        "count": len(rows),
+        "income_count": sum(r["tx_type"] == "income" for r in rows),
+        "expense_count": sum(r["tx_type"] == "expense" for r in rows),
+        "income": round(income, 2),
+        "spending": round(spending, 2),
+        "net": round(income - spending, 2),
+    }
+
+
 def filter_transactions(conn, start=None, end=None, categories=None, tx_types=None):
     """Return matching rows, newest first. Empty/None filters mean 'all'."""
     sql = "SELECT * FROM transactions WHERE 1=1"

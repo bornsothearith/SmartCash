@@ -16,6 +16,14 @@ pip install pytest
 python -m pytest tests
 ```
 
+## Design
+- The app uses the SmartCash design system in `design-system/` (dark theme, one lavender accent).
+  Start with `design-system/SKILL.md`, then `brand-book.md`. Use its tokens; don't invent colours, fonts or spacing.
+- The theme lives in `.streamlit/config.toml`. Custom HTML (cards, money amounts, the transaction list) is built in `ui.py`,
+  which loads `design-system/tokens.css` and `components/components.css`.
+- The Transactions tab shows **Income, Spending and Net** in separate cards (all in USD) instead of one mixed total.
+  Money is shown as `$1,284.50` / `៛40,000`, with + for income and − for spending.
+
 ## Notes
 - Data is saved in a local file, `smartcash.db` (kept out of GitHub by `.gitignore`).
   It moves to PostgreSQL in SCG-35.

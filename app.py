@@ -1,17 +1,18 @@
 """SmartCash: Sprint 1 increment.
 
 SCG-31 Add expense
-SCG-33 View and filter transactions
+SCG-33 View and filter transactions (styled with design-system/, see ui.py)
 Run with:  streamlit run app.py
 """
 from datetime import date, timedelta
 
-import pandas as pd
 import streamlit as st
 
 import db
+import ui
 
 st.set_page_config(page_title="SmartCash", page_icon="💵", layout="wide")
+ui.inject_css()
 
 conn = db.connect()
 
@@ -57,28 +58,31 @@ with list_tab:
     period = f1.date_input("Dates", value=(default_start, date.today()))
     cats = f2.multiselect("Categories", db.EXPENSE_CATEGORIES,
                           placeholder="All categories")
-    types = f3.multiselect("Type", ["expense", "income"], placeholder="All")
+    types = f3.multiselect("Type", ["expense", "income"], placeholder="All",
+                           format_func=lambda t: "Income" if t == "income" else "Expense")
 
     start, end = (period if isinstance(period, tuple) and len(period) == 2
                   else (period[0] if isinstance(period, tuple) else period, None))
     rows = db.filter_transactions(conn, start, end, cats, types)
 
     if not rows:
-        st.info("No transactions match these filters. Add an expense, or widen the dates.")
+        ui.html(ui.empty_card("No transactions match these filters",
+                              "Add an expense, or widen the dates."))
     else:
-        df = pd.DataFrame(rows)
-        df["usd"] = [db.to_usd(a, c) for a, c in zip(df.amount, df.currency)]
-        m1, m2 = st.columns(2)
-        m1.metric("Transactions", len(df))
-        m2.metric("Total (USD)", f"${df.usd.sum():,.2f}")
-        st.caption(f"Riel is converted at {db.KHR_PER_USD:,} KHR = $1 for now "
-                   "(placeholder until the daily rate table, SCG-28).")
-        show = df[["tx_date", "tx_type", "amount", "currency", "category",
-                   "payment_method", "note"]].rename(columns={
-            "tx_date": "Date", "tx_type": "Type", "amount": "Amount",
-            "currency": "Currency", "category": "Category",
-            "payment_method": "Paid with", "note": "Note"})
-        st.dataframe(show, hide_index=True, width="stretch")
+        s = db.summarize(rows)
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            ui.html(ui.summary_card("Income", s["income"], "income",
+                                    ui.plural(s["income_count"], "income entry", "income entries")))
+        with c2:
+            ui.html(ui.summary_card("Spending", s["spending"], "expense",
+                                    ui.plural(s["expense_count"], "expense", "expenses")))
+        with c3:
+            ui.html(ui.summary_card("Net", s["net"], ui.net_direction(s["net"]),
+                                    "Income minus spending", featured=True))
+        st.caption(f"{ui.plural(s['count'], 'transaction', 'transactions')}. All totals in USD. Riel is converted at {db.KHR_PER_USD:,} KHR = $1 "
+                   "for now (placeholder until the daily rate table, SCG-28).")
+        ui.html(ui.transactions_table(rows))
 
 with st.sidebar:
     st.subheader("Demo data")
