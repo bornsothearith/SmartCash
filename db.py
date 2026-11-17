@@ -18,6 +18,7 @@ EXPENSE_CATEGORIES = [
     "Entertainment & social", "Health", "Family, gifts & ceremonies", "Other",
 ]
 PAYMENT_METHODS = ["Cash", "Mobile banking / QR", "Card", "Other"]
+INCOME_TYPES = ["Allowance", "Part-time job", "Scholarship", "Gift", "Other"]
 
 # Placeholder only. SCG-28 replaces this with a daily official rate table.
 KHR_PER_USD = 4100
@@ -30,6 +31,16 @@ class Expense:
     currency: str
     category: str
     payment_method: str
+    note: str = ""
+
+
+@dataclass
+class Income:
+    tx_date: date
+    amount: float
+    currency: str
+    income_type: str          # saved in the `category` column
+    received_as: str = ""     # optional; saved in `payment_method` ("" = not given)
     note: str = ""
 
 
@@ -90,8 +101,60 @@ def add_expense(conn, e: Expense, is_demo=False):
     return cur.lastrowid
 
 
+def validate_income(i: Income, today=None):
+    """Same rules as an expense, but with income types. Empty list = valid."""
+    today = today or date.today()
+    errors = []
+    if i.amount is None or i.amount <= 0:
+        errors.append("Amount must be more than 0.")
+    if i.currency not in CURRENCIES:
+        errors.append("Currency must be USD or KHR.")
+    elif i.currency == "KHR" and i.amount and i.amount != int(i.amount):
+        errors.append("Riel amounts must be whole numbers.")
+    if i.income_type not in INCOME_TYPES:
+        errors.append("Pick an income type from the list.")
+    if i.received_as and i.received_as not in PAYMENT_METHODS:
+        errors.append("Pick how you received it from the list, or leave it blank.")
+    if i.tx_date > today:
+        errors.append("Date can't be in the future.")
+    if len(i.note) > 200:
+        errors.append("Note must be 200 characters or fewer.")
+    return errors
+
+
+def add_income(conn, i: Income, is_demo=False):
+    errors = validate_income(i)
+    if errors:
+        raise ValueError(" ".join(errors))
+    cur = conn.execute(
+        "INSERT INTO transactions (tx_date, tx_type, amount, currency, category,"
+        " payment_method, note, is_demo) VALUES (?, 'income', ?, ?, ?, ?, ?, ?)",
+        (i.tx_date.isoformat(), float(i.amount), i.currency, i.income_type,
+         i.received_as or "", i.note.strip(), int(is_demo)),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
 def to_usd(amount, currency):
     return amount if currency == "USD" else amount / KHR_PER_USD
+
+
+def summarize(rows):
+    """Income, spending and net in USD for a list of transaction rows.
+
+    Kept apart so the Transactions tab never shows one mixed total.
+    """
+    income = sum(to_usd(r["amount"], r["currency"]) for r in rows if r["tx_type"] == "income")
+    spending = sum(to_usd(r["amount"], r["currency"]) for r in rows if r["tx_type"] == "expense")
+    return {
+        "count": len(rows),
+        "income_count": sum(r["tx_type"] == "income" for r in rows),
+        "expense_count": sum(r["tx_type"] == "expense" for r in rows),
+        "income": round(income, 2),
+        "spending": round(spending, 2),
+        "net": round(income - spending, 2),
+    }
 
 
 def filter_transactions(conn, start=None, end=None, categories=None, tx_types=None):
@@ -128,6 +191,18 @@ def load_demo_data(conn, n=30, seed=7):
             payment_method=rng.choice(PAYMENT_METHODS),
             note="demo",
         ), is_demo=True)
+
+
+def load_demo_income(conn, seed=7):
+    """Add a few clearly fake income rows (allowance, job, gift) for the demo."""
+    rng = random.Random(seed)
+    today = date.today()
+    demo = [("Allowance", 60, "USD", 27), ("Allowance", 60, "USD", 0),
+            ("Part-time job", 100000, "KHR", rng.randint(3, 10)),
+            ("Gift", 20000, "KHR", rng.randint(11, 20))]
+    for kind, amount, currency, days_ago in demo:
+        add_income(conn, Income(today - timedelta(days=days_ago), amount, currency,
+                                kind, "Cash", "demo"), is_demo=True)
 
 
 def clear_demo_data(conn):
