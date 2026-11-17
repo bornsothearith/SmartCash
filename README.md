@@ -16,6 +16,14 @@ pip install pytest
 python -m pytest tests
 ```
 
+## Fake test data (SCG-29)
+```
+python synthetic.py          # writes data/synthetic/sample.csv
+```
+- Normal rows: expenses + income in USD and KHR.
+- Messy rows: broken on purpose (the `problem` column says how) to test validation. Includes duplicates.
+- Every row has `source = synthetic`. **Never use it for findings.**
+
 ## Notes
 - Data is saved in a local file, `smartcash.db` (kept out of GitHub by `.gitignore`).
   It moves to PostgreSQL in SCG-35.
