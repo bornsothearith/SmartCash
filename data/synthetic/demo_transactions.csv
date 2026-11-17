@@ -1,0 +1,11 @@
+tx_date,tx_type,amount,currency,category,payment_method,note,is_demo
+2026-11-01,expense,3.50,USD,Food & drinks,Cash,Synthetic lunch,1
+2026-11-01,expense,8000,KHR,Transport,Mobile banking / QR,Synthetic tuk-tuk,1
+2026-11-02,expense,2.25,USD,Phone & internet,Mobile banking / QR,Synthetic top-up,1
+2026-11-03,expense,12000,KHR,Groceries,Cash,Synthetic groceries,1
+2026-11-04,expense,8.00,USD,Education,Card,Synthetic supplies,1
+2026-11-05,expense,2000,KHR,Food & drinks,Cash,Synthetic snack,1
+2026-11-06,expense,4.50,USD,Entertainment & social,Mobile banking / QR,Synthetic activity,1
+2026-11-07,expense,20000,KHR,Shopping & personal care,Card,Synthetic purchase,1
+2026-11-08,expense,1.50,USD,Transport,Cash,Synthetic ride,1
+2026-11-09,expense,5000,KHR,Health,Cash,Synthetic medicine,1

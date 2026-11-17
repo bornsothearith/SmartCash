@@ -1,0 +1,1 @@
+"""Next-week forecast page."""
