@@ -1,0 +1,6 @@
+# Binary files: never change line endings (keeps PDFs and images safe)
+*.pdf binary
+*.png binary
+*.jpg binary
+*.zip binary
+*.db binary
