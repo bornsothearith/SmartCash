@@ -1,5 +1,15 @@
-smartcash.db
-*.db
-__pycache__/
-.env
+# --- Private data (SCG-68): never commit ---
 data/real/
+data/synthetic/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Secrets (SCG-68): never commit ---
+.env
+.env.*
+.streamlit/secrets.toml
+
+# --- Python ---
+__pycache__/
+.pytest_cache/
