@@ -34,12 +34,13 @@ python -m pytest tests
 app.py                  the Streamlit app (screens only, starts here)
 smartcash/              all the logic
   config.py             file paths + secrets (SCG-68)
-  db.py                 SQLite connection and tables
+  database/connection.py SQLite connection and tables
   auth.py               sign up, log in, password hashing (SCG-75)
   transactions.py       add, check and filter transactions (SCG-31, SCG-33)
   rates.py              daily USD/KHR rates (SCG-28)
   synthetic.py          fake test data (SCG-29)
-  theme.py              colours, cards and table (UI design)
+  ui/theme.py            colours, cards and table (UI design)
+  validation/            transaction and CSV validation rules
 data/
   exchange_rates.csv    NBC official rates (public, on GitHub)
   smartcash.db          the database (NOT on GitHub)

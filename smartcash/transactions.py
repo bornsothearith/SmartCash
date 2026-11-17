@@ -8,14 +8,12 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from smartcash import rates
-
-CURRENCIES = ["USD", "KHR"]
-EXPENSE_CATEGORIES = [
-    "Food & drinks", "Groceries", "Transport", "Phone & internet",
-    "Education", "Rent & utilities", "Shopping & personal care",
-    "Entertainment & social", "Health", "Family, gifts & ceremonies", "Other",
-]
-PAYMENT_METHODS = ["Cash", "Mobile banking / QR", "Card", "Other"]
+from smartcash.validation import (
+    CURRENCIES,
+    EXPENSE_CATEGORIES,
+    PAYMENT_METHODS,
+    validate_expense,
+)
 
 
 @dataclass
@@ -26,27 +24,6 @@ class Expense:
     category: str
     payment_method: str
     note: str = ""
-
-
-def validate_expense(e: Expense, today=None):
-    """Return a list of problems. Empty list means the expense is valid."""
-    today = today or date.today()
-    errors = []
-    if e.amount is None or e.amount <= 0:
-        errors.append("Amount must be more than 0.")
-    if e.currency not in CURRENCIES:
-        errors.append("Currency must be USD or KHR.")
-    elif e.currency == "KHR" and e.amount and e.amount != int(e.amount):
-        errors.append("Riel amounts must be whole numbers.")
-    if e.category not in EXPENSE_CATEGORIES:
-        errors.append("Pick a category from the list.")
-    if e.payment_method not in PAYMENT_METHODS:
-        errors.append("Pick a payment method from the list.")
-    if e.tx_date > today:
-        errors.append("Date can't be in the future.")
-    if len(e.note) > 200:
-        errors.append("Note must be 200 characters or fewer.")
-    return errors
 
 
 def add_expense(conn, user_id, e: Expense, is_demo=False):

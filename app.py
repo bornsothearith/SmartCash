@@ -10,8 +10,9 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from smartcash import auth, db, rates, theme
+from smartcash import auth, db, rates
 from smartcash import transactions as tx
+from smartcash.ui import theme
 
 st.set_page_config(page_title="SmartCash", page_icon="💵", layout="wide")
 st.markdown(theme.CSS, unsafe_allow_html=True)

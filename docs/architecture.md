@@ -15,9 +15,10 @@ flowchart LR
         auth["auth.py<br/>sign up, log in,<br/>password hashing"]
         tx["transactions.py<br/>add, check, filter"]
         rates["rates.py<br/>rate_for, sync_rates"]
-        db["db.py<br/>connection + tables"]
+        db["database/connection.py<br/>connection + tables"]
         config["config.py<br/>paths + secrets"]
-        theme["theme.py<br/>colours, cards, table"]
+        theme["ui/theme.py<br/>colours, cards, table"]
+        validation["validation/<br/>transaction + CSV rules"]
         syn["synthetic.py<br/>fake test data"]
     end
 
@@ -30,6 +31,7 @@ flowchart LR
     app --> auth
     app --> tx
     app --> theme
+    app --> validation
     auth --> db
     tx --> db
     tx --> rates
@@ -47,4 +49,6 @@ flowchart LR
 - Every transaction function needs the `user_id`, so a user only sees their own rows.
 - `rates.py` turns KHR into USD with the official rate of that day.
 - `config.py` keeps all file paths and reads secrets from the environment or Streamlit secrets.
+- `database/connection.py` owns SQLite connection setup and table creation.
+- `validation/` contains reusable transaction and CSV input rules.
 - A push to GitHub updates the live app on Streamlit Cloud.
