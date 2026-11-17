@@ -108,22 +108,58 @@ with list_tab:
 
 with dashboard_tab:
     st.subheader("Spending overview")
-    rows = db.filter_transactions(conn)
+    st.caption("Illustrative dashboard layout based on the DataViz proposal.")
+
+    filter_date, filter_category = st.columns([2, 2])
+    dashboard_period = filter_date.date_input(
+        "Period", value=(date.today() - timedelta(days=180), date.today())
+    )
+    dashboard_categories = filter_category.multiselect(
+        "Category", db.EXPENSE_CATEGORIES, placeholder="All categories"
+    )
+    if isinstance(dashboard_period, tuple) and len(dashboard_period) == 2:
+        dashboard_start, dashboard_end = dashboard_period
+    else:
+        dashboard_start, dashboard_end = date.today() - timedelta(days=180), date.today()
+
+    rows = db.filter_transactions(conn, dashboard_start, dashboard_end, dashboard_categories)
     if not rows:
-        st.info("Add or import transactions to see the dashboard.")
+        st.info("Add or import transactions to see the dashboard charts.")
     else:
         df = pd.DataFrame(rows)
-        df["usd"] = [db.to_usd(a, c, date.fromisoformat(d), conn)
-                      for a, c, d in zip(df.amount, df.currency, df.tx_date)]
-        expenses = df[df.tx_type == "expense"]
-        income = df[df.tx_type == "income"]
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Income", f"${income.usd.sum():,.2f}")
-        c2.metric("Spending", f"${expenses.usd.sum():,.2f}")
-        c3.metric("Net cash flow", f"${income.usd.sum() - expenses.usd.sum():,.2f}")
-        if not expenses.empty:
-            by_category = expenses.groupby("category", as_index=False)["usd"].sum()
-            st.bar_chart(by_category.set_index("category"))
+        df["date"] = pd.to_datetime(df["tx_date"])
+        df["usd"] = [db.to_usd(amount, currency, tx_date.date(), conn)
+                      for amount, currency, tx_date in zip(df.amount, df.currency, df.date)]
+        expenses = df[df.tx_type == "expense"].copy()
+        income = df[df.tx_type == "income"].copy()
+        income_total = income.usd.sum()
+        spending_total = expenses.usd.sum()
+        net_total = income_total - spending_total
+        savings_rate = (net_total / income_total * 100) if income_total else 0
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Income", f"${income_total:,.2f}")
+        c2.metric("Spending", f"${spending_total:,.2f}")
+        c3.metric("Net cash flow", f"${net_total:,.2f}")
+        c4.metric("Savings rate", f"{savings_rate:.1f}%")
+
+        if expenses.empty:
+            st.info("No expense records match these filters yet.")
+        else:
+            weekly = expenses.set_index("date")["usd"].resample("W-SUN").sum().rename("Weekly spending")
+            trend = weekly.to_frame()
+            trend["4-week average"] = weekly.rolling(4, min_periods=1).mean()
+            left_chart, right_chart = st.columns([3, 2])
+            with left_chart:
+                st.markdown("**Weekly spending (USD)**")
+                st.line_chart(trend, y_label="USD", x_label="Week")
+            with right_chart:
+                st.markdown("**Top categories this period**")
+                by_category = (expenses.groupby("category", as_index=False)["usd"].sum()
+                               .sort_values("usd", ascending=True)
+                               .set_index("category"))
+                st.bar_chart(by_category, y="usd", horizontal=True, x_label="USD")
+            st.caption("Solid line = weekly spending. Dashed-style comparison = four-week average. All amounts are USD equivalents.")
 
 with st.sidebar:
     st.subheader("Privacy notice")
