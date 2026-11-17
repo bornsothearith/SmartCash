@@ -3,3 +3,4 @@ smartcash.db
 __pycache__/
 .env
 data/real/
+.pytest_cache/
