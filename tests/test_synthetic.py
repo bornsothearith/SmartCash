@@ -2,8 +2,8 @@
 import csv
 from datetime import date
 
-import db
-import synthetic
+from smartcash import synthetic
+from smartcash import transactions as tx
 
 
 def test_normal_rows_are_valid_and_marked_fake():
@@ -11,7 +11,7 @@ def test_normal_rows_are_valid_and_marked_fake():
     assert len(rows) == 200
     assert all(r["source"] == "synthetic" and r["problem"] == "" for r in rows)
     expenses = [r for r in rows if r["tx_type"] == "expense"]
-    assert all(not db.validate_expense(synthetic.to_expense(r)) for r in expenses)
+    assert all(not tx.validate_expense(synthetic.to_expense(r)) for r in expenses)
 
 
 def test_normal_rows_have_both_currencies_and_income():
@@ -28,7 +28,7 @@ def test_every_messy_kind_appears_and_is_rejected():
     assert set(synthetic.MESSY_KINDS) | {"duplicate"} <= kinds
     for r in rows:
         if r["problem"] != "duplicate":
-            assert db.validate_expense(synthetic.to_expense(r)), r["problem"]
+            assert tx.validate_expense(synthetic.to_expense(r)), r["problem"]
 
 
 def test_duplicates_come_in_identical_pairs():

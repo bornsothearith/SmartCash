@@ -8,8 +8,8 @@ Makes FAKE transactions for tests and demos, before real diary data grows.
 Never use this data for findings or statistics. Every row is marked
 source="synthetic".
 
-Run:  python synthetic.py                 -> writes data/synthetic/sample.csv
-      python synthetic.py --normal 200 --messy 30 --out my_file.csv
+Run:  python -m smartcash.synthetic      -> writes data/synthetic/sample.csv
+      python -m smartcash.synthetic --normal 200 --messy 30 --out my_file.csv
 """
 import argparse
 import csv
@@ -17,7 +17,7 @@ import random
 from datetime import date, timedelta
 from pathlib import Path
 
-import db
+from smartcash import transactions as tx
 
 INCOME_CATEGORIES = ["Allowance", "Part-time job", "Scholarship", "Gift", "Other"]
 
@@ -60,17 +60,17 @@ def normal_rows(n=100, seed=7, days=56, today=None):
     rows = []
     for _ in range(n):
         d = today - timedelta(days=rng.randint(0, days - 1))
-        cur = rng.choice(db.CURRENCIES)
+        cur = rng.choice(tx.CURRENCIES)
         if rng.random() < 0.1:
             cat = rng.choice(INCOME_CATEGORIES)
             usd, khr = _INCOME[cat]
             rows.append(_row(d, "income", rng.choice(usd if cur == "USD" else khr),
                              cur, cat, rng.choice(["Cash", "Mobile banking / QR"])))
         else:
-            cat = rng.choice(db.EXPENSE_CATEGORIES)
+            cat = rng.choice(tx.EXPENSE_CATEGORIES)
             usd, khr = _PRICES[cat]
             rows.append(_row(d, "expense", rng.choice(usd if cur == "USD" else khr),
-                             cur, cat, rng.choice(db.PAYMENT_METHODS)))
+                             cur, cat, rng.choice(tx.PAYMENT_METHODS)))
     return rows
 
 
@@ -113,8 +113,8 @@ def messy_rows(n=20, seed=11, today=None):
 
 
 def to_expense(row):
-    """Turn an expense row into a db.Expense so it can be validated or saved."""
-    return db.Expense(row["tx_date"], row["amount"], row["currency"],
+    """Turn an expense row into a tx.Expense so it can be validated or saved."""
+    return tx.Expense(row["tx_date"], row["amount"], row["currency"],
                       row["category"], row["payment_method"], row["note"])
 
 
