@@ -13,7 +13,7 @@ import streamlit as st
 from smartcash import auth, db, rates
 from smartcash import diary_import
 from smartcash import transactions as tx
-from smartcash.ui import theme
+from smartcash.ui import charts, theme
 
 st.set_page_config(page_title="SmartCash", page_icon="💵", layout="wide")
 st.markdown(theme.CSS, unsafe_allow_html=True)
@@ -27,6 +27,53 @@ st.session_state.setdefault("page", "Transactions")
 
 def go_to_add():
     st.session_state.page = "Add transaction"
+
+
+# Page changes must happen in callbacks (they run BEFORE the menu is drawn).
+# Setting st.session_state.page after the menu exists crashes Streamlit.
+def start_edit(tx_id):
+    st.session_state.edit_id = tx_id
+    st.session_state.pop("delete_id", None)
+
+
+def stop_edit():
+    st.session_state.pop("edit_id", None)
+
+
+def ask_delete(tx_id):
+    st.session_state.delete_id = tx_id
+
+
+def cancel_delete():
+    st.session_state.pop("delete_id", None)
+
+
+def confirm_delete(tx_id, label):
+    # Only remember the choice here. The delete itself runs in the page code below,
+    # because a callback must not use the database connection from the previous run
+    # (SQLite only allows a connection in the thread that made it).
+    st.session_state.pop("delete_id", None)
+    st.session_state.do_delete = (tx_id, label)
+
+
+def run_pending_delete(user_id):
+    pending = st.session_state.pop("do_delete", None)
+    if pending:
+        tx_id, label = pending
+        tx.delete_transaction(conn, user_id, tx_id)
+        st.session_state.flash = f"Deleted {label}."
+
+
+def on_menu_change():
+    # Picking a page in the menu always leaves the edit screen and any open delete question.
+    st.session_state.pop("edit_id", None)
+    st.session_state.pop("delete_id", None)
+
+
+def show_flash():
+    msg = st.session_state.pop("flash", None)
+    if msg:
+        st.success(msg.replace("$", "\\$"))
 
 
 def log_out():
@@ -91,6 +138,8 @@ def transactions_page(user_id):
     h1, h2 = st.columns([4, 1], vertical_alignment="bottom")
     h1.title("Transactions")
     h1.caption("Review, filter, and manage income and expenses.")
+    run_pending_delete(user_id)
+    show_flash()
     h2.button("+ Add transaction", type="primary", on_click=go_to_add,
               use_container_width=True)
 
@@ -117,48 +166,38 @@ def transactions_page(user_id):
     df = pd.DataFrame(rows)
     spend = df.loc[df.tx_type == "expense", "usd"].sum()
     income = df.loc[df.tx_type == "income", "usd"].sum()
-    khr_share = (df.currency == "KHR").mean()
+    net = income - spend
     today_rate = rates.rate_used(date.today())
 
     st.markdown(theme.cards([
-        ("Transactions", f"{len(df)}", "in this view", theme.BLUE),
-        ("Total spending", f"${spend:,.2f}", "USD equivalent", theme.AMBER),
-        ("Paid in riel", f"{khr_share:.0%}", "of transactions", theme.TEAL),
+        ("Income", f"${income:,.2f}", "USD equivalent", theme.GREEN),
+        ("Spending", f"${spend:,.2f}", "USD equivalent", theme.AMBER),
+        ("Net", f"{'-' if net < 0 else ''}${abs(net):,.2f}", "income minus spending", theme.BLUE),
         ("Rate used today", f"{today_rate.khr_per_usd:,.0f}",
-         "KHR = $1 · NBC" + (" (earlier day)" if today_rate.filled else ""), theme.GREEN),
+         "KHR = $1 · NBC" + (" (earlier day)" if today_rate.filled else ""), theme.TEAL),
     ]), unsafe_allow_html=True)
-    if income:
-        st.caption(f"Income in this view: \\${income:,.2f}")
+    st.caption(f"{len(df)} transactions in this view.")
 
     st.markdown(theme.tx_table(rows), unsafe_allow_html=True)
     st.divider()
     st.subheader("Manage transactions")
     for row in rows:
-        left, middle, edit, delete = st.columns([4, 2, 1, 1])
+        label = (f"{row['tx_date']} · {row['tx_type'].capitalize()} · {row['category']} · "
+                 f"{theme.money(row['amount'], row['currency'])}")
+        left, middle, edit, delete = st.columns([4, 2, 1, 1], vertical_alignment="center")
         left.write(f"{row['tx_date']} · {row['tx_type'].capitalize()} · {row['category']}")
         middle.write(theme.money(row["amount"], row["currency"]))
-        if edit.button("Edit", key=f"edit-{row['id']}"):
-            st.session_state.edit_id = row["id"]
-            st.session_state.page = "Transactions"
-            st.rerun()
-        if delete.button("Delete", key=f"delete-{row['id']}"):
-            st.session_state.delete_id = row["id"]
-            st.session_state.confirm_delete = True
-            st.rerun()
+        edit.button("Edit", key=f"edit-{row['id']}", on_click=start_edit, args=(row["id"],))
+        delete.button("Delete", key=f"delete-{row['id']}", on_click=ask_delete, args=(row["id"],))
+        if st.session_state.get("delete_id") == row["id"]:
+            # Ask right under the row the user clicked, not at the bottom of the list.
+            with st.container(border=True):
+                st.warning(f"Delete {label}? This can't be undone.")
+                yes, no, _ = st.columns([1, 1, 4])
+                yes.button("Yes, delete", type="primary", key=f"yes-{row['id']}",
+                           on_click=confirm_delete, args=(row["id"], label))
+                no.button("Cancel", key=f"no-{row['id']}", on_click=cancel_delete)
 
-    if st.session_state.get("confirm_delete"):
-        delete_id = st.session_state.get("delete_id")
-        st.warning("Delete this transaction permanently?")
-        yes, no = st.columns(2)
-        if yes.button("Yes, delete", type="primary"):
-            tx.delete_transaction(conn, user_id, delete_id)
-            st.session_state.pop("delete_id", None)
-            st.session_state.pop("confirm_delete", None)
-            st.rerun()
-        if no.button("Cancel"):
-            st.session_state.pop("delete_id", None)
-            st.session_state.pop("confirm_delete", None)
-            st.rerun()
     st.caption("USD uses the National Bank of Cambodia official rate of each "
                "transaction's day. On days with no official rate (weekends, "
                "holidays) the last earlier rate is used and its date is shown.")
@@ -198,7 +237,8 @@ def add_page(user_id):
             category = c4.selectbox("Income source" if tx_type == "income" else "Category",
                                     category_options)
             c5, c6 = st.columns(2)
-            payment = c5.selectbox("Paid with", tx.PAYMENT_METHODS)
+            payment = c5.selectbox("Received as" if tx_type == "income" else "Paid with",
+                                   tx.PAYMENT_METHODS)
             note = c6.text_input("Note (optional)", max_chars=200,
                                  placeholder="e.g. lunch near campus")
             saved = st.form_submit_button("Save transaction", type="primary")
@@ -220,30 +260,41 @@ def add_page(user_id):
 
 def edit_page(user_id):
     rows = tx.filter_transactions(conn, user_id)
-    row = next((r for r in rows if r["id"] == st.session_state.get("edit_id")), None)
+    tx_id = st.session_state.get("edit_id")
+    row = next((r for r in rows if r["id"] == tx_id), None)
+    st.button("← Back to transactions", on_click=stop_edit)
     if row is None:
-        st.error("Transaction was not found.")
+        st.error("Transaction was not found. It may have been deleted.")
         return
     st.title("Edit transaction")
-    tx_type = st.radio("Transaction type", ["expense", "income"],
-                       index=0 if row["tx_type"] == "expense" else 1,
-                       format_func=str.capitalize, horizontal=True)
-    categories = tx.INCOME_CATEGORIES if tx_type == "income" else tx.EXPENSE_CATEGORIES
-    with st.form("edit_transaction"):
+    st.caption("Change any field, then save. The same checks as Add are used.")
+    k = f"edit-{tx_id}"   # keys per row, so editing another row starts fresh
+    with st.container(border=True):
+        tx_type = st.radio("Transaction type", ["expense", "income"], key=f"{k}-type",
+                           index=0 if row["tx_type"] == "expense" else 1,
+                           format_func=str.capitalize, horizontal=True)
         c1, c2 = st.columns(2)
-        tx_date = c1.date_input("Date", date.fromisoformat(row["tx_date"]), max_value=date.today())
-        currency = c2.radio("Currency", tx.CURRENCIES,
+        currency = c1.radio("Currency", tx.CURRENCIES, key=f"{k}-cur",
                             index=tx.CURRENCIES.index(row["currency"]), horizontal=True)
-        c3, c4 = st.columns(2)
-        amount = c3.number_input("Amount", min_value=0.0, value=float(row["amount"]),
-                                 step=0.25 if currency == "USD" else 500.0)
-        category = c4.selectbox("Income source" if tx_type == "income" else "Category",
-                                categories, index=categories.index(row["category"]) if row["category"] in categories else 0)
-        c5, c6 = st.columns(2)
-        payment = c5.selectbox("Paid with", tx.PAYMENT_METHODS,
-                               index=tx.PAYMENT_METHODS.index(row["payment_method"]) if row["payment_method"] in tx.PAYMENT_METHODS else 0)
-        note = c6.text_input("Note (optional)", value=row.get("note") or "", max_chars=200)
-        saved = st.form_submit_button("Save changes", type="primary")
+        tx_date = c2.date_input("Date", date.fromisoformat(row["tx_date"]),
+                                max_value=date.today(), key=f"{k}-date")
+        categories = tx.INCOME_CATEGORIES if tx_type == "income" else tx.EXPENSE_CATEGORIES
+        with st.form(f"{k}-form", border=False):
+            c3, c4 = st.columns(2)
+            amount = c3.number_input(
+                f"Amount ({currency})", min_value=0.0, value=float(row["amount"]),
+                step=0.25 if currency == "USD" else 500.0,
+                format="%.2f" if currency == "USD" else "%.0f")
+            category = c4.selectbox(
+                "Income source" if tx_type == "income" else "Category", categories,
+                index=categories.index(row["category"]) if row["category"] in categories else 0)
+            c5, c6 = st.columns(2)
+            payment = c5.selectbox(
+                "Received as" if tx_type == "income" else "Paid with", tx.PAYMENT_METHODS,
+                index=(tx.PAYMENT_METHODS.index(row["payment_method"])
+                       if row["payment_method"] in tx.PAYMENT_METHODS else 0))
+            note = c6.text_input("Note (optional)", value=row.get("note") or "", max_chars=200)
+            saved = st.form_submit_button("Save changes", type="primary")
     if saved:
         updated = tx.Transaction(tx_date, tx_type, amount, currency, category, payment, note)
         problems = tx.validate_transaction(updated)
@@ -252,8 +303,8 @@ def edit_page(user_id):
                 st.error(problem)
         else:
             tx.update_transaction(conn, user_id, row["id"], updated)
-            st.success("Transaction updated.")
-            st.session_state.page = "Transactions"
+            st.session_state.flash = (f"Updated: {tx_date} · {tx_type.capitalize()} · {category} · "
+                                      f"{theme.money(amount, currency)}.")
             st.session_state.pop("edit_id", None)
             st.rerun()
 
@@ -280,7 +331,11 @@ def import_page(user_id):
         choice = st.selectbox(header, fields, index=fields.index(guess) if guess in fields else 0,
                               key=f'import-column-{i}-{header}')
         mapping[header] = None if choice == 'Ignore' else choice
-    date_format = st.selectbox('Date format', ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y'])
+    date_labels = {'%Y-%m-%d': 'Year-month-day (2026-11-18)',
+                   '%d/%m/%Y': 'Day/month/year (18/11/2026)',
+                   '%m/%d/%Y': 'Month/day/year (11/18/2026)'}
+    date_format = st.selectbox('Date format in your file', list(date_labels),
+                               format_func=date_labels.get)
     if st.button("Import CSV", type="primary"):
         uploaded.seek(0)
         try:
@@ -311,36 +366,47 @@ def overview_page(user_id):
     expenses = df.loc[df.tx_type == "expense", "usd"].sum() if not df.empty else 0
     income = df.loc[df.tx_type == "income", "usd"].sum() if not df.empty else 0
     balance = income - expenses
-    categories = (df.loc[df.tx_type == "expense"].groupby("category")["usd"]
-                  .sum().sort_values(ascending=False) if not df.empty else pd.Series(dtype=float))
     st.markdown(theme.cards([
-        ("Balance", f"${balance:,.2f}", "income minus spending", theme.BLUE),
-        ("Spent this month", f"${expenses:,.2f}", "USD equivalent", theme.AMBER),
+        ("Balance", f"{'-' if balance < 0 else ''}${abs(balance):,.2f}", "income minus spending", theme.BLUE),
+        ("Spent", f"${expenses:,.2f}", "USD, last 30 days", theme.AMBER),
         ("Income", f"${income:,.2f}", "recorded income", theme.GREEN),
         ("Transactions", str(len(rows)), "last 30 days", theme.TEAL),
     ]), unsafe_allow_html=True)
     left, right = st.columns([1.2, 1])
     with left:
-        st.subheader("Weekly spending")
-        if df.empty or not (df.tx_type == "expense").any():
-            st.info("Add or import transactions to see the spending chart.")
+        week_rows = _prepared_rows(user_id, charts.week_start(date.today()) - timedelta(weeks=8),
+                                   date.today())
+        weekly, so_far = charts.weekly_totals(week_rows, weeks=8)
+        if weekly.usd.sum() == 0:
+            st.info("Add or import transactions to see your weekly spending.")
         else:
-            chart = df[df.tx_type == "expense"].copy()
-            chart["week"] = pd.to_datetime(chart["tx_date"]).dt.to_period("W").astype(str)
-            st.bar_chart(chart.groupby("week")["usd"].sum())
+            weekly = charts.trim_leading_empty_weeks(weekly)
+            st.altair_chart(charts.weekly_spending_chart(weekly), use_container_width=True)
+            st.caption(f"This week so far: \\${so_far:,.2f} (added to the chart when the week ends).")
+            with st.expander("Show data"):
+                st.dataframe(weekly[["week_label", "usd"]].rename(
+                    columns={"week_label": "Week", "usd": "Spent (USD)"}), hide_index=True)
     with right:
-        st.subheader("Top categories")
-        if categories.empty:
+        top = charts.category_totals(rows, top=5)
+        if top.empty:
             st.info("Category insights will appear here.")
         else:
-            st.bar_chart(categories.head(5))
+            st.altair_chart(charts.category_bars_chart(top, "Top categories",
+                                                       "USD spent, last 30 days"),
+                            use_container_width=True)
+            with st.expander("Show data"):
+                st.dataframe(top.rename(columns={"category": "Category", "usd": "Spent (USD)"}),
+                             hide_index=True)
 
 
 def budgets_page(user_id):
     """Budget screen matching the prototype with local budget limits."""
     st.title("Monthly budgets")
-    st.caption("Set limits by category and see what is left.")
-    defaults = {"Food & drinks": 120, "Transport": 60, "Shopping": 100, "Bills": 80}
+    st.caption("Set limits by category and see what is left this month (USD).")
+    st.caption("Budgets are kept until you log out. Saving them for good comes with the Budgets story.")
+    # Must be real category names, or the spending never matches and shows $0.
+    defaults = {"Food & drinks": 120, "Transport": 45,
+                "Shopping & personal care": 30, "Entertainment & social": 35}
     budgets = st.session_state.setdefault("budgets", defaults.copy())
     with st.expander("Add or update a budget"):
         with st.form("budget_form"):
@@ -360,7 +426,7 @@ def budgets_page(user_id):
         status = "Over budget" if amount > limit else ("Watch" if ratio >= .8 else "On track")
         colour = "red" if amount > limit else ("orange" if ratio >= .8 else "green")
         st.markdown(
-            f"**{category}** — ${amount:,.2f} of ${limit:,.2f}<br>"
+            f"**{category}** — \\${amount:,.2f} of \\${limit:,.2f}<br>"
             f"<div class='sc-budget-track'><div class='sc-budget-fill {colour}' "
             f"style='width:{ratio * 100:.0f}%'></div></div>"
             f"<span class='sc-budget-status {colour}'>{status}</span>",
@@ -371,24 +437,25 @@ def budgets_page(user_id):
 def forecast_page(user_id):
     """Transparent forecast based on the trailing four weekly totals."""
     st.title("Next week forecast")
-    st.caption("An estimate based on recent spending — not a promise.")
-    rows = _prepared_rows(user_id, date.today() - timedelta(days=28), date.today())
-    df = pd.DataFrame([r for r in rows if r["tx_type"] == "expense"])
-    if df.empty:
-        st.info("Add transactions to generate a forecast.")
+    st.caption("An estimate based on your last 4 full weeks — not a promise.")
+    rows = _prepared_rows(user_id, charts.week_start(date.today()) - timedelta(weeks=8),
+                          date.today())
+    weekly, so_far = charts.weekly_totals(rows, weeks=8)
+    fc = charts.forecast(weekly)
+    if fc is None:
+        st.info("Add at least one full week of spending to get a forecast.")
         return
-    df["week"] = pd.to_datetime(df["tx_date"]).dt.to_period("W").astype(str)
-    weekly = df.groupby("week")["usd"].sum()
-    average = float(weekly.tail(4).mean()) if not weekly.empty else 0
     st.markdown(theme.cards([
-        ("Expected next week", f"${average:,.2f}", "4-week average", theme.BLUE),
-        ("Likely low", f"${average * .85:,.2f}", "estimated range", theme.TEAL),
-        ("Likely high", f"${average * 1.15:,.2f}", "estimated range", theme.AMBER),
+        ("Likely spending", f"${fc['estimate']:,.2f}", "average of last 4 full weeks", theme.BLUE),
+        ("Likely range", f"${fc['low']:,.0f} - ${fc['high']:,.0f}",
+         "lowest to highest recent week", theme.TEAL),
+        ("This week so far", f"${so_far:,.2f}", "week not finished", theme.AMBER),
     ]), unsafe_allow_html=True)
-    st.subheader("Weekly spending and forecast")
-    forecast = weekly.copy()
-    forecast.loc["Next week"] = average
-    st.line_chart(forecast)
+    st.altair_chart(charts.forecast_chart(charts.trim_leading_empty_weeks(weekly), fc),
+                    use_container_width=True)
+    with st.expander("Show data"):
+        st.dataframe(weekly[["week_label", "usd"]].rename(
+            columns={"week_label": "Week", "usd": "Spent (USD)"}), hide_index=True)
 
 
 def study_insights_page(user_id):
@@ -410,8 +477,13 @@ def study_insights_page(user_id):
         ("Top category", str(category_totals.index[0]), "highest total", theme.TEAL),
         ("Records analysed", str(len(df)), "expense records", theme.PURPLE),
     ]), unsafe_allow_html=True)
-    st.subheader("Spending by category")
-    st.bar_chart(category_totals)
+    all_cats = charts.category_totals(rows)
+    st.altair_chart(charts.category_bars_chart(all_cats, "Spending by category",
+                                               "USD, all time, biggest first"),
+                    use_container_width=True)
+    with st.expander("Show data"):
+        st.dataframe(all_cats.rename(columns={"category": "Category", "usd": "Spent (USD)"}),
+                     hide_index=True)
 
 
 # ---------------- Main app (logged in) ----------------
@@ -419,15 +491,17 @@ def main_app(user):
     st.markdown(theme.TOPBAR, unsafe_allow_html=True)
     with st.sidebar:
         st.caption("WORKSPACE")
-        st.radio("Menu", PAGES, key="page", label_visibility="collapsed")
+        st.radio("Menu", PAGES, key="page", label_visibility="collapsed",
+                 on_change=on_menu_change)
         st.caption("Your money workspace")
 
         with st.expander("Demo data"):
             st.caption("Fake transactions for testing, only in your account.")
-            if st.button("Add 30 demo expenses", use_container_width=True):
+            if st.button("Add demo data (30 expenses + 4 income)", use_container_width=True):
                 tx.load_demo_data(conn, user["id"])
+                tx.load_demo_income(conn, user["id"])
                 st.rerun()
-            if st.button("Remove demo expenses", use_container_width=True):
+            if st.button("Remove demo data", use_container_width=True):
                 tx.clear_demo_data(conn, user["id"])
                 st.rerun()
 

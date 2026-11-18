@@ -142,6 +142,25 @@ def load_demo_data(conn, user_id, n=30, seed=7):
         ), is_demo=True)
 
 
+# Typical student income over 4 weeks: (income type, amount, currency, days ago, received as)
+DEMO_INCOME = [
+    ("Allowance", 60, "USD", 26, "Cash"),
+    ("Part-time job", 100000, "KHR", 18, "Mobile banking / QR"),
+    ("Allowance", 60, "USD", 12, "Cash"),
+    ("Gift", 20000, "KHR", 5, "Cash"),
+]
+
+
+def load_demo_income(conn, user_id, today=None):
+    """Add a few clearly fake income rows (allowance, part-time job, gift)."""
+    today = today or date.today()
+    for kind, amount, currency, days_ago, received in DEMO_INCOME:
+        add_transaction(conn, user_id, Transaction(
+            today - timedelta(days=days_ago), "income", amount, currency,
+            kind, received, "demo"), is_demo=True)
+    return len(DEMO_INCOME)
+
+
 def clear_demo_data(conn, user_id):
     conn.execute("DELETE FROM transactions WHERE is_demo = 1 AND user_id = ?", (user_id,))
     conn.commit()

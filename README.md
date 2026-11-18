@@ -160,25 +160,6 @@ Synthetic examples: `tests/fixtures/diary_standard.csv` and
 `tests/fixtures/diary_google_form.csv`. No real participant records are included.
 The minimal raw table is created on app startup on SQLite and PostgreSQL; the full
 analytics schema and hosted deployment remain separate SCG-35 work.
-Upload a UTF-8 CSV in **Import diary**. Review the column mapping before importing.
-Standard headers map directly: `tx_date, tx_type, amount, currency, category, payment_method`.
-Optional fields: `note, is_demo, source`. Google Form headings `Date` or `Transaction date`,
-`Transaction type`, `Amount`, `Currency`, `Category`, `Paid with` or `Payment method`,
-and `Notes` are recognized automatically. Map other question headings manually.
-Select ISO (`%Y-%m-%d`), day/month/year, or month/day/year explicitly; ambiguous dates
-are never guessed. Use the app's category/payment choices and expense/income types.
-
-Each parsed row is stored in private `diary_raw` with a batch ID, owner, original JSON,
-row number, status, and rejection reason. Even ignored columns remain in raw storage:
-exclude personal identifiers and bank details before uploading. Valid rows also enter
-`transactions`; duplicates are recorded but not inserted twice. The UI reports rows read,
-imported, duplicated, and rejected. Missing headers prevent import; malformed CSV can
-stop a partially completed import. Re-uploading skips existing matching transactions.
-
-Synthetic examples: `tests/fixtures/diary_standard.csv` and
-`tests/fixtures/diary_google_form.csv`. No real participant records are included.
-The minimal raw table is created on app startup on SQLite and PostgreSQL; the full
-analytics schema and hosted deployment remain separate SCG-35 work.
 - Open **Import diary** after logging in.
 - Required columns: `tx_date, tx_type, amount, currency, category, payment_method`.
 - Optional columns: `note, is_demo, source`.
