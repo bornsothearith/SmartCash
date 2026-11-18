@@ -1,0 +1,2 @@
+tx_date,tx_type,amount,currency,category,payment_method,note,is_demo
+2026-01-01,expense,3,USD,Transport,Cash,Sample travel,1

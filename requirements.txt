@@ -1,2 +1,4 @@
 streamlit>=1.40
 pandas>=2.0
+pandera[pandas]>=0.20
+psycopg[binary]>=3.2

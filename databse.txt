@@ -1,0 +1,7 @@
+create dabase in PostgreSQL name: smart_cash with pw: smartcash123
+
+run in powershell:
+$env:DATABASE_URL="postgresql://smartcash_user:smartcash123@localhost:5432/smart_cash"
+
+test connection in project folder:
+python -c "import os; print(os.environ.get('DATABASE_URL'))"                          

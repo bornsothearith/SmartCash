@@ -91,10 +91,15 @@ def create_user(conn, username, password, confirm):
     taken = conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
     if taken:
         raise SignupError(["That username is taken. Try another one."])
-    cur = conn.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                       (username, hash_password(password)))
+    # RETURNING works for both SQLite and PostgreSQL and avoids relying on
+    # SQLite-only cursor.lastrowid when the app uses the PostgreSQL backend.
+    cur = conn.execute(
+        "INSERT INTO users (username, password_hash) VALUES (?, ?) RETURNING id",
+        (username, hash_password(password)),
+    )
+    new_user = cur.fetchone()
     conn.commit()
-    return cur.lastrowid
+    return new_user["id"] if hasattr(new_user, "keys") else new_user[0]
 
 
 def login(conn, username, password, now=None):

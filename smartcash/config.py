@@ -12,6 +12,11 @@ DB_PATH = DATA_DIR / "smartcash.db"          # ignored by git (*.db)
 RATES_CSV = DATA_DIR / "exchange_rates.csv"  # public NBC data, OK on git
 
 
+def database_url():
+    """Return an optional PostgreSQL URL from the environment or secrets."""
+    return get_secret("DATABASE_URL")
+
+
 def get_secret(name, default=None):
     """Read a secret (e.g. DB_PASSWORD) without hard-coding it.
 

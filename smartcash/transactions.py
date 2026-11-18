@@ -1,4 +1,4 @@
-"""SCG-31 Add expense and SCG-33 View and filter transactions.
+"""Transaction operations for income, expenses, editing, and deletion.
 
 Every function takes a user_id, so a user only ever reads or changes
 their own rows (SCG-75).
@@ -11,7 +11,9 @@ from smartcash import rates
 from smartcash.validation import (
     CURRENCIES,
     EXPENSE_CATEGORIES,
+    INCOME_CATEGORIES,
     PAYMENT_METHODS,
+    validate_transaction,
     validate_expense,
 )
 
@@ -26,20 +28,72 @@ class Expense:
     note: str = ""
 
 
-def add_expense(conn, user_id, e: Expense, is_demo=False):
+@dataclass
+class Transaction:
+    tx_date: date
+    tx_type: str
+    amount: float
+    currency: str
+    category: str
+    payment_method: str
+    note: str = ""
+
+
+def add_transaction(conn, user_id, transaction: Transaction, is_demo=False, *, commit=True):
+    """Save an income or expense transaction for one user."""
     if not user_id:
         raise ValueError("You must be logged in.")
-    errors = validate_expense(e)
+    errors = validate_transaction(transaction)
     if errors:
         raise ValueError(" ".join(errors))
     cur = conn.execute(
         "INSERT INTO transactions (user_id, tx_date, tx_type, amount, currency, category,"
-        " payment_method, note, is_demo) VALUES (?, ?, 'expense', ?, ?, ?, ?, ?, ?)",
-        (user_id, e.tx_date.isoformat(), float(e.amount), e.currency, e.category,
-         e.payment_method, e.note.strip(), int(is_demo)),
+        " payment_method, note, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (user_id, transaction.tx_date.isoformat(), transaction.tx_type,
+         float(transaction.amount), transaction.currency, transaction.category,
+         transaction.payment_method, transaction.note.strip(), int(is_demo)),
+    )
+    new_transaction = cur.fetchone()
+    if commit:
+        conn.commit()
+    return (new_transaction["id"] if hasattr(new_transaction, "keys")
+            else new_transaction[0])
+
+
+def add_expense(conn, user_id, e: Expense, is_demo=False):
+    return add_transaction(conn, user_id, Transaction(
+        e.tx_date, "expense", e.amount, e.currency, e.category,
+        e.payment_method, e.note), is_demo=is_demo)
+
+
+def update_transaction(conn, user_id, transaction_id, transaction: Transaction):
+    """Update one transaction, restricted to its owner."""
+    if not user_id:
+        raise ValueError("You must be logged in.")
+    errors = validate_transaction(transaction)
+    if errors:
+        raise ValueError(" ".join(errors))
+    cur = conn.execute(
+        "UPDATE transactions SET tx_date = ?, tx_type = ?, amount = ?, currency = ?,"
+        " category = ?, payment_method = ?, note = ? WHERE id = ? AND user_id = ?",
+        (transaction.tx_date.isoformat(), transaction.tx_type, float(transaction.amount),
+         transaction.currency, transaction.category, transaction.payment_method,
+         transaction.note.strip(), transaction_id, user_id),
     )
     conn.commit()
-    return cur.lastrowid
+    if cur.rowcount != 1:
+        raise ValueError("Transaction was not found.")
+
+
+def delete_transaction(conn, user_id, transaction_id):
+    """Delete one transaction, restricted to its owner."""
+    if not user_id:
+        raise ValueError("You must be logged in.")
+    cur = conn.execute("DELETE FROM transactions WHERE id = ? AND user_id = ?",
+                       (transaction_id, user_id))
+    conn.commit()
+    if cur.rowcount != 1:
+        raise ValueError("Transaction was not found.")
 
 
 def to_usd(amount, currency, tx_date=None):
