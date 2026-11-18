@@ -171,3 +171,16 @@ analytics schema and hosted deployment remain separate SCG-35 work.
   transactions there are lost. This is fixed when we move to PostgreSQL (SCG-35).
 - "Demo data" in the sidebar adds fake expenses to **your own** account only.
 - Deploy: push to GitHub, then create an app on share.streamlit.io pointing to `app.py`.
+
+## After every push to main (deploy checklist)
+1. Run `python -m pytest tests` **before** pushing. All tests must pass.
+2. Push. Streamlit Cloud updates the live app in about a minute.
+3. If you changed any file inside `smartcash/`, open the live app → **Manage app → ⋮ → Reboot app**.
+   (Streamlit can keep old copies of those files in memory. `smartcash/freshness.py` tries to
+   reload them by itself, but rebooting is the sure way.)
+4. Click through the live app: log in, Add demo data, Transactions → Edit → Save, Delete,
+   Overview, Budgets, Forecast, Import diary.
+5. If you see a red error, open **Manage app → Logs** for the full message.
+
+Note: a reboot also empties the live SQLite database (all accounts). This stops when we move to
+PostgreSQL (SCG-35).

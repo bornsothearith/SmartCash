@@ -218,11 +218,12 @@ def test_demo_data_add_and_remove(app, user):
     app.run()
     tx.add_transaction(c, uid, expense(note="my own"))          # real row must survive
     app.run()
-    button(app, "Add demo data (30 expenses + 4 income)").click().run()
+    button(app, f"Add demo data ({tx.DEMO_EXPENSES} expenses + {tx.DEMO_INCOME} income)").click().run()
+    assert not app.exception, app.exception
     rows = tx.filter_transactions(c, uid)
-    assert sum(r["tx_type"] == "expense" and r["is_demo"] for r in rows) == 30
+    assert sum(r["tx_type"] == "expense" and r["is_demo"] for r in rows) == tx.DEMO_EXPENSES >= 30
     income = [r for r in rows if r["tx_type"] == "income"]
-    assert len(income) == 4 and all(r["is_demo"] for r in income)
+    assert len(income) == tx.DEMO_INCOME >= 40 and all(r["is_demo"] for r in income)
     assert {r["category"] for r in income} <= set(tx.INCOME_CATEGORIES)
     assert "$" in text(app) and not app.exception                # totals show income
     button(app, "Remove demo data").click().run()
@@ -257,3 +258,12 @@ def test_log_out_clears_everything(app, user):
     button(app, "Log out").click().run()
     assert app.title[0].value == "Welcome to SmartCash"
     assert "user" not in app.session_state
+
+
+@pytest.mark.parametrize("page", PAGES)
+def test_every_page_opens_after_demo_button(app, user, page):
+    """The exact path that broke on the live app: click the demo button, then visit every page."""
+    app.run()
+    button(app, f"Add demo data ({tx.DEMO_EXPENSES} expenses + {tx.DEMO_INCOME} income)").click().run()
+    assert not app.exception, app.exception
+    go(app, page)

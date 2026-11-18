@@ -10,6 +10,11 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
+# Must run BEFORE the other smartcash imports: after a git push, reload any
+# smartcash file that changed, so new app.py never runs with old module code.
+from smartcash import freshness
+freshness.reload_if_changed()
+
 from smartcash import auth, db, rates
 from smartcash import diary_import
 from smartcash import transactions as tx
@@ -497,8 +502,9 @@ def main_app(user):
 
         with st.expander("Demo data"):
             st.caption("Fake transactions for testing, only in your account.")
-            if st.button("Add demo data (30 expenses + 4 income)", use_container_width=True):
-                tx.load_demo_data(conn, user["id"])
+            if st.button(f"Add demo data ({tx.DEMO_EXPENSES} expenses + {tx.DEMO_INCOME} income)",
+                         key="add-demo", use_container_width=True):
+                tx.load_demo_data(conn, user["id"], n=tx.DEMO_EXPENSES, days=tx.DEMO_DAYS)
                 tx.load_demo_income(conn, user["id"])
                 st.rerun()
             if st.button("Remove demo data", use_container_width=True):

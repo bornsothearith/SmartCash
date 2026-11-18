@@ -125,40 +125,56 @@ def filter_transactions(conn, user_id, start=None, end=None, categories=None, tx
     return [dict(r) for r in conn.execute(sql, params)]
 
 
-def load_demo_data(conn, user_id, n=30, seed=7):
+# How much demo data the sidebar button adds, spread over 8 weeks so every chart has data.
+DEMO_EXPENSES = 60
+DEMO_INCOME = 45
+DEMO_DAYS = 56
+
+
+def load_demo_data(conn, user_id, n=30, seed=7, days=28, today=None):
     """Add clearly fake expenses so the list and filters can be demoed."""
     rng = random.Random(seed)
-    today = date.today()
+    today = today or date.today()
     for _ in range(n):
         cur = rng.choice(CURRENCIES)
         amt = (rng.choice([1.5, 2.25, 3, 4.5, 8, 12]) if cur == "USD"
                else rng.choice([2000, 5000, 8000, 12000, 20000]))
         add_expense(conn, user_id, Expense(
-            tx_date=today - timedelta(days=rng.randint(0, 27)),
+            tx_date=today - timedelta(days=rng.randint(0, days - 1)),
             amount=amt, currency=cur,
             category=rng.choice(EXPENSE_CATEGORIES),
             payment_method=rng.choice(PAYMENT_METHODS),
             note="demo",
         ), is_demo=True)
+    return n
 
 
-# Typical student income over 4 weeks: (income type, amount, currency, days ago, received as)
-DEMO_INCOME = [
-    ("Allowance", 60, "USD", 26, "Cash"),
-    ("Part-time job", 100000, "KHR", 18, "Mobile banking / QR"),
-    ("Allowance", 60, "USD", 12, "Cash"),
-    ("Gift", 20000, "KHR", 5, "Cash"),
-]
+def load_demo_income(conn, user_id, n=DEMO_INCOME, seed=11, days=DEMO_DAYS, today=None):
+    """Add clearly fake student income: weekly allowance, part-time shifts, gifts.
 
-
-def load_demo_income(conn, user_id, today=None):
-    """Add a few clearly fake income rows (allowance, part-time job, gift)."""
+    - one $25 allowance every week
+    - one $100 scholarship payment
+    - the rest: part-time job shifts (most) and small gifts, in USD or KHR
+    """
+    rng = random.Random(seed)
     today = today or date.today()
-    for kind, amount, currency, days_ago, received in DEMO_INCOME:
+    rows = [("Allowance", 25, "USD", d, "Cash") for d in range(0, days, 7)]
+    rows.append(("Scholarship", 100, "USD", min(40, days - 1), "Mobile banking / QR"))
+    while len(rows) < n:
+        cur = rng.choice(CURRENCIES)
+        if rng.random() < 0.75:
+            kind = "Part-time job"
+            amt = rng.choice([5, 8, 10]) if cur == "USD" else rng.choice([20000, 30000, 40000])
+        else:
+            kind = "Gift"
+            amt = rng.choice([5, 10]) if cur == "USD" else rng.choice([10000, 20000])
+        rows.append((kind, amt, cur, rng.randint(0, days - 1),
+                     rng.choice(["Cash", "Mobile banking / QR"])))
+    for kind, amount, currency, days_ago, received in rows[:n]:
         add_transaction(conn, user_id, Transaction(
             today - timedelta(days=days_ago), "income", amount, currency,
             kind, received, "demo"), is_demo=True)
-    return len(DEMO_INCOME)
+    return min(n, len(rows))
 
 
 def clear_demo_data(conn, user_id):
