@@ -15,7 +15,7 @@ import streamlit as st
 from smartcash import freshness
 freshness.reload_if_changed()
 
-from smartcash import auth, db, rates
+from smartcash import auth, config, db, rates
 from smartcash import diary_import
 from smartcash import transactions as tx
 from smartcash.ui import charts, theme
@@ -24,7 +24,20 @@ st.set_page_config(page_title="SmartCash", page_icon="💵", layout="wide",
                    initial_sidebar_state="expanded")
 st.markdown(theme.CSS, unsafe_allow_html=True)
 
-conn = db.connect()
+def get_connection():
+    """PostgreSQL: one connection per browser session, reused on every click
+    (opening a new one each time would leak connections on the free plan).
+    SQLite (local/tests): a new connection each run, because SQLite connections
+    can't move between Streamlit's threads."""
+    if not config.database_url():
+        return db.connect()
+    conn = st.session_state.get("_db_conn")
+    if conn is None or conn.closed:
+        conn = st.session_state["_db_conn"] = db.connect()
+    return conn
+
+
+conn = get_connection()
 
 PAGES = ["Overview", "Transactions", "Budgets", "Forecast", "Study Insights",
          "Add transaction", "Import diary"]
@@ -84,6 +97,9 @@ def show_flash():
 
 def log_out():
     # Forget everything about this session (user, filters, form values).
+    old = st.session_state.get("_db_conn")
+    if old is not None and not old.closed:
+        old.close()
     for key in list(st.session_state.keys()):
         del st.session_state[key]
 
@@ -106,7 +122,7 @@ def auth_page():
                 password = st.text_input("Password", type="password",
                                          autocomplete="current-password")
                 sent = st.form_submit_button("Log in", type="primary",
-                                             use_container_width=True)
+                                             width="stretch")
             if sent:
                 try:
                     st.session_state.user = auth.login(conn, username, password)
@@ -128,7 +144,7 @@ def auth_page():
                 confirm = st.text_input("Type the password again", type="password",
                                         autocomplete="new-password")
                 made = st.form_submit_button("Create account", type="primary",
-                                             use_container_width=True)
+                                             width="stretch")
             if made:
                 try:
                     uid = auth.create_user(conn, new_user, new_pw, confirm)
@@ -147,7 +163,7 @@ def transactions_page(user_id):
     run_pending_delete(user_id)
     show_flash()
     h2.button("+ Add transaction", type="primary", on_click=go_to_add,
-              use_container_width=True)
+              width="stretch")
 
     with st.container(border=True):
         f1, f2, f3 = st.columns([2, 2, 1])
@@ -352,7 +368,7 @@ def import_page(user_id):
         st.success(f"Read {result['read']} rows. Imported {result['imported']}. Skipped {result['duplicates']} duplicates. Rejected {len(result['rejected'])}.")
         if result["rejected"]:
             st.error(f"Rejected {len(result['rejected'])} rows.")
-            st.dataframe(pd.DataFrame(result["rejected"]), use_container_width=True)
+            st.dataframe(pd.DataFrame(result["rejected"]), width="stretch")
 
 
 def _prepared_rows(user_id, start=None, end=None):
@@ -387,7 +403,7 @@ def overview_page(user_id):
             st.info("Add or import transactions to see your weekly spending.")
         else:
             weekly = charts.trim_leading_empty_weeks(weekly)
-            st.altair_chart(charts.weekly_spending_chart(weekly), use_container_width=True)
+            st.altair_chart(charts.weekly_spending_chart(weekly), width="stretch")
             st.caption(f"This week so far: \\${so_far:,.2f} (added to the chart when the week ends).")
             with st.expander("Show data"):
                 st.dataframe(weekly[["week_label", "usd"]].rename(
@@ -399,7 +415,7 @@ def overview_page(user_id):
         else:
             st.altair_chart(charts.category_bars_chart(top, "Top categories",
                                                        "USD spent, last 30 days"),
-                            use_container_width=True)
+                            width="stretch")
             with st.expander("Show data"):
                 st.dataframe(top.rename(columns={"category": "Category", "usd": "Spent (USD)"}),
                              hide_index=True)
@@ -458,7 +474,7 @@ def forecast_page(user_id):
         ("This week so far", f"${so_far:,.2f}", "week not finished", theme.AMBER),
     ]), unsafe_allow_html=True)
     st.altair_chart(charts.forecast_chart(charts.trim_leading_empty_weeks(weekly), fc),
-                    use_container_width=True)
+                    width="stretch")
     with st.expander("Show data"):
         st.dataframe(weekly[["week_label", "usd"]].rename(
             columns={"week_label": "Week", "usd": "Spent (USD)"}), hide_index=True)
@@ -486,7 +502,7 @@ def study_insights_page(user_id):
     all_cats = charts.category_totals(rows)
     st.altair_chart(charts.category_bars_chart(all_cats, "Spending by category",
                                                "USD, all time, biggest first"),
-                    use_container_width=True)
+                    width="stretch")
     with st.expander("Show data"):
         st.dataframe(all_cats.rename(columns={"category": "Category", "usd": "Spent (USD)"}),
                      hide_index=True)
@@ -504,16 +520,16 @@ def main_app(user):
         with st.expander("Demo data"):
             st.caption("Fake transactions for testing, only in your account.")
             if st.button(f"Add demo data ({tx.DEMO_EXPENSES} expenses + {tx.DEMO_INCOME} income)",
-                         key="add-demo", use_container_width=True):
+                         key="add-demo", width="stretch"):
                 tx.reset_demo_data(conn, user["id"])   # replaces old demo rows, never stacks them
                 st.rerun()
-            if st.button("Remove demo data", use_container_width=True):
+            if st.button("Remove demo data", width="stretch"):
                 tx.clear_demo_data(conn, user["id"])
                 st.rerun()
 
         st.markdown(f"<div class='sc-user'>Logged in as <b>{theme.escape(user['username'])}</b></div>",
                     unsafe_allow_html=True)
-        st.button("Log out", on_click=log_out, use_container_width=True)
+        st.button("Log out", on_click=log_out, width="stretch")
         st.markdown(theme.PRIVACY, unsafe_allow_html=True)
 
     if st.session_state.get("edit_id"):

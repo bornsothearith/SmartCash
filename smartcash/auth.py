@@ -88,7 +88,7 @@ def create_user(conn, username, password, confirm):
     errors = validate_signup(username, password, confirm)
     if errors:
         raise SignupError(errors)
-    taken = conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+    taken = conn.execute("SELECT 1 FROM users WHERE lower(username) = lower(?)", (username,)).fetchone()
     if taken:
         raise SignupError(["That username is taken. Try another one."])
     # RETURNING works for both SQLite and PostgreSQL and avoids relying on
@@ -106,7 +106,7 @@ def login(conn, username, password, now=None):
     """Return {'id', 'username'} if the password is right. Else raise LoginError."""
     now = now or datetime.now()
     username = (username or "").strip()
-    user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    user = conn.execute("SELECT * FROM users WHERE lower(username) = lower(?)", (username,)).fetchone()
     if user is None:
         verify_password(password or "", _DUMMY_HASH)   # same time as a real check
         raise LoginError(WRONG_LOGIN)

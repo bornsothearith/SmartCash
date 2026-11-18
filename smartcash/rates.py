@@ -89,6 +89,13 @@ def sync_rates(conn, path=None):
         r = rate_for(day, rates)
         rows.append((day.isoformat(), r.khr_per_usd, rates[r.rate_date][1], int(r.filled)))
         day += timedelta(days=1)
+    # Skip the rewrite when the table already holds exactly these rates
+    # (on PostgreSQL this saves ~70 network round trips at every start).
+    have = {r["rate_date"]: (float(r["khr_per_usd"]), int(r["is_filled"]))
+            for r in conn.execute("SELECT rate_date, khr_per_usd, is_filled FROM exchange_rates")}
+    want = {d: (float(k), f) for d, k, _, f in rows}
+    if have == want:
+        return len(rows)
     conn.execute("DELETE FROM exchange_rates")
     conn.executemany(
         "INSERT INTO exchange_rates (rate_date, khr_per_usd, source, is_filled)"

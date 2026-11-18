@@ -68,8 +68,8 @@ python -m pytest tests
 app.py                  the Streamlit app (screens only, starts here)
 smartcash/              all the logic
   config.py             file paths + secrets (SCG-68)
-  database/connection.py SQLite connection and tables
-  database/schema.sql   PostgreSQL schema
+  database/connection.py picks PostgreSQL (DATABASE_URL set) or local SQLite
+  database/postgres.py  PostgreSQL adapter + migration runner (SCG-35)
   auth.py               sign up, log in, password hashing (SCG-75)
   transactions.py       add, check and filter transactions (SCG-31, SCG-33)
   rates.py              daily USD/KHR rates (SCG-28)
@@ -77,6 +77,8 @@ smartcash/              all the logic
   ui/theme.py            colours, cards and table (UI design)
   validation/            transaction and CSV validation rules
   diary_import.py        CSV diary import and duplicate detection
+migrations/             PostgreSQL tables, one numbered .sql file per change (SCG-35)
+scripts/                copy_sqlite_to_postgres.py (move local data to PostgreSQL)
 data/
   exchange_rates.csv    NBC official rates (public, on GitHub)
   smartcash.db          the database (NOT on GitHub)
@@ -135,10 +137,35 @@ python -m smartcash.synthetic          # writes data/synthetic/sample.csv
 
 GitHub draws these Mermaid diagrams automatically.
 
-## PostgreSQL (SCG-35)
-- Set `DATABASE_URL` in an environment variable or `.streamlit/secrets.toml`.
-- When `DATABASE_URL` exists, the app creates and uses PostgreSQL tables from `smartcash/database/schema.sql`.
-- Without it, the app uses local `data/smartcash.db` for development and tests.
+## PostgreSQL database (SCG-35)
+The live app keeps its data in a free hosted **PostgreSQL** database (Neon), so
+accounts and transactions **survive app restarts**. Without a database URL the
+app uses the local SQLite file `data/smartcash.db` (development and tests).
+
+**Where the connection string lives (never in the code, never on GitHub):**
+- Local: `.streamlit/secrets.toml` (copy `.streamlit/secrets.toml.example`).
+- Streamlit Cloud: **Manage app → Settings → Secrets**, same line:
+  `DATABASE_URL = "postgresql://...?sslmode=require"`
+
+**Tables:** created by `migrations/001_core_tables.sql` and `002_diary_import.sql`.
+Each file runs **once**, in number order, when the app starts; the table
+`schema_migrations` remembers which ones ran. To change the database later, add a
+NEW file (`003_budgets.sql`, ...). Never edit a file that already ran.
+- Money is `NUMERIC` (exact), dates are `DATE`, and every table with user data has `user_id`.
+- Usernames are unique ignoring upper/lower case.
+
+**Copy your current local data into PostgreSQL** (accounts, transactions, imports):
+```
+python -m scripts.copy_sqlite_to_postgres          # dry run: shows counts only
+python -m scripts.copy_sqlite_to_postgres --yes    # really copy (only into an empty database)
+```
+
+**Test against PostgreSQL** (uses a throwaway database that each test wipes, NEVER Neon):
+```
+set SMARTCASH_TEST_PG_URL=postgresql://USER@localhost:PORT/EMPTY_TEST_DB
+python -m pytest tests/test_postgres.py
+```
+Without that variable these tests are skipped.
 
 ## Diary CSV import (SCG-36)
 Upload a UTF-8 CSV in **Import diary**. Review the column mapping before importing.
@@ -166,10 +193,10 @@ analytics schema and hosted deployment remain separate SCG-35 work.
 - Duplicate rows for the same user are skipped. Invalid rows appear in the rejected-row report.
 
 ## Notes
-- The database is a local SQLite file, `data/smartcash.db`. It moves to PostgreSQL in SCG-35.
-- **On Streamlit Cloud the SQLite file is reset when the app restarts**, so accounts and
-  transactions there are lost. This is fixed when we move to PostgreSQL (SCG-35).
-- "Demo data" in the sidebar adds fake expenses to **your own** account only.
+- Live app: hosted PostgreSQL (see "PostgreSQL database"). Local: SQLite file `data/smartcash.db`.
+- If `DATABASE_URL` is missing on Streamlit Cloud, the app falls back to SQLite there, and that
+  file is **reset on every restart**. Check the Secrets box if accounts start disappearing.
+- "Demo data" in the sidebar adds fake income and expenses to **your own** account only.
 - Deploy: push to GitHub, then create an app on share.streamlit.io pointing to `app.py`.
 
 ## After every push to main (deploy checklist)
@@ -182,5 +209,4 @@ analytics schema and hosted deployment remain separate SCG-35 work.
    Overview, Budgets, Forecast, Import diary.
 5. If you see a red error, open **Manage app → Logs** for the full message.
 
-Note: a reboot also empties the live SQLite database (all accounts). This stops when we move to
-PostgreSQL (SCG-35).
+With PostgreSQL set up, a reboot keeps all accounts and transactions.

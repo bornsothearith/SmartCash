@@ -25,6 +25,7 @@ RELOAD_ORDER = [
     "smartcash.validation.diary_schema",
     "smartcash.validation",
     "smartcash.transactions",
+    "smartcash.database.postgres",
     "smartcash.database.connection",
     "smartcash.database",
     "smartcash.db",
