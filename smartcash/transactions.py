@@ -177,6 +177,17 @@ def load_demo_income(conn, user_id, n=DEMO_INCOME, seed=11, days=DEMO_DAYS, toda
     return min(n, len(rows))
 
 
+def reset_demo_data(conn, user_id):
+    """Remove this user's old demo rows, then add one fresh set.
+
+    Clicking the demo button twice used to add everything twice (duplicates,
+    spending above income). Now the result is always the same one set.
+    """
+    clear_demo_data(conn, user_id)
+    load_demo_data(conn, user_id, n=DEMO_EXPENSES, days=DEMO_DAYS)
+    load_demo_income(conn, user_id)
+
+
 def clear_demo_data(conn, user_id):
     conn.execute("DELETE FROM transactions WHERE is_demo = 1 AND user_id = ?", (user_id,))
     conn.commit()

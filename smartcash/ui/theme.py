@@ -15,7 +15,13 @@ CSS = f"""
         --amber:{AMBER}; --red:{RED}; --muted:{MUTED}; --border:{BORDER}; }}
 html, body, [data-testid="stAppViewContainer"] {{ background:#fff; color:var(--navy); }}
 body, .stApp {{ font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }}
-#MainMenu, footer, header[data-testid="stHeader"], div[data-testid="stToolbar"] {{ display:none !important; }}
+/* Hide Streamlit's Deploy + main menu, but KEEP the header itself: it holds the
+   "Expand sidebar" button. Hiding the whole header made a collapsed sidebar impossible to reopen. */
+#MainMenu, footer, [data-testid="stToolbarActions"], [data-testid="stAppDeployButton"],
+[data-testid="stMainMenu"], [data-testid="stDecoration"] {{ display:none !important; }}
+header[data-testid="stHeader"] {{ background:transparent; }}
+[data-testid="stExpandSidebarButton"] {{ display:flex !important; visibility:visible !important;
+  background:#fff; border:1px solid var(--border); border-radius:10px; color:var(--navy); }}
 .block-container {{ padding: 2.2rem 1.5rem 3.5rem; max-width: 1080px; }}
 h1, h2, h3 {{ color: var(--navy); letter-spacing: -0.02em; }}
 h1 {{ font-size:2rem; font-weight:800; }}

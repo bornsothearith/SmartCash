@@ -20,7 +20,8 @@ from smartcash import diary_import
 from smartcash import transactions as tx
 from smartcash.ui import charts, theme
 
-st.set_page_config(page_title="SmartCash", page_icon="💵", layout="wide")
+st.set_page_config(page_title="SmartCash", page_icon="💵", layout="wide",
+                   initial_sidebar_state="expanded")
 st.markdown(theme.CSS, unsafe_allow_html=True)
 
 conn = db.connect()
@@ -504,8 +505,7 @@ def main_app(user):
             st.caption("Fake transactions for testing, only in your account.")
             if st.button(f"Add demo data ({tx.DEMO_EXPENSES} expenses + {tx.DEMO_INCOME} income)",
                          key="add-demo", use_container_width=True):
-                tx.load_demo_data(conn, user["id"], n=tx.DEMO_EXPENSES, days=tx.DEMO_DAYS)
-                tx.load_demo_income(conn, user["id"])
+                tx.reset_demo_data(conn, user["id"])   # replaces old demo rows, never stacks them
                 st.rerun()
             if st.button("Remove demo data", use_container_width=True):
                 tx.clear_demo_data(conn, user["id"])

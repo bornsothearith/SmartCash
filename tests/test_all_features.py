@@ -267,3 +267,25 @@ def test_every_page_opens_after_demo_button(app, user, page):
     button(app, f"Add demo data ({tx.DEMO_EXPENSES} expenses + {tx.DEMO_INCOME} income)").click().run()
     assert not app.exception, app.exception
     go(app, page)
+
+
+def test_demo_button_twice_does_not_double(app, user):
+    c, uid = user
+    tx.add_transaction(c, uid, expense(note="my own"))
+    app.run()
+    label = f"Add demo data ({tx.DEMO_EXPENSES} expenses + {tx.DEMO_INCOME} income)"
+    button(app, label).click().run()
+    button(app, label).click().run()
+    rows = tx.filter_transactions(c, uid)
+    assert len(rows) == tx.DEMO_EXPENSES + tx.DEMO_INCOME + 1      # one demo set + my own row
+    assert sum(r["note"] == "my own" for r in rows) == 1
+
+
+def test_sidebar_starts_open_and_can_be_reopened():
+    """The theme must not hide the header: it holds the 'Expand sidebar' button."""
+    from pathlib import Path
+    from smartcash.ui import theme
+    assert 'header[data-testid="stHeader"] {{' not in theme.CSS
+    assert "display:none" not in theme.CSS.split('header[data-testid="stHeader"]')[1].split("}")[0]
+    assert 'stExpandSidebarButton' in theme.CSS
+    assert 'initial_sidebar_state="expanded"' in (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
